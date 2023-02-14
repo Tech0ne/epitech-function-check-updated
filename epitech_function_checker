@@ -31,7 +31,9 @@ def get_function_list() -> List[str]:
         print(f"Check.py: could not read function_list.result: {e.errno}")
         sys.exit(0)
     with f:
-        return(list(map(lambda x: x[:-1], f.readlines())))
+        data = f.readlines()
+    os.remove("function_list.result")
+    return(list(map(lambda x: x[:-1], data)))
 
 def get_database() -> dict:
     try:
