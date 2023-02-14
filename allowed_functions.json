@@ -1,0 +1,12 @@
+{
+    "projects": {
+        "{bin_name}": {
+            "projectName":"{project_name}",
+            "module":"{module name}",
+            "allowedFunctions": [
+                "malloc",
+                "free"
+            ]
+        }
+    }
+}
