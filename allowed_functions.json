@@ -1,8 +1,17 @@
 {
+    "comment": "Add as many \"projects\" as you can have (like one binary name, one debug binary name ...)",
     "projects": {
         "{bin_name}": {
-            "projectName":"{project_name}",
-            "module":"{module name}",
+            "projectName": "{project_name}",
+            "module": "{module_name}",
+            "allowedFunctions": [
+                "malloc",
+                "free"
+            ]
+        },
+        "{debug_bin_name}": {
+            "projectName": "{project_name}",
+            "module": "{module_name}",
             "allowedFunctions": [
                 "malloc",
                 "free"

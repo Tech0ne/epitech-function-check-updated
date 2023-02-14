@@ -1,5 +1,21 @@
 #!/bin/bash
 
+echo "Installing requirements"
+
+# ubuntu (class)
+sudo apt-get update 2>/dev/null
+sudo apt-get -y install gdb 2>/dev/null
+sudo apt-get -y install python3 2>/dev/null
+sudo apt-get -y install python3-pip 2>/dev/null
+
+# fedora (berk)
+sudo dnf makecache --refresh
+sudo dnf -y install gdb 2>/dev/null
+sudo dnf -y install python3 2>/dev/null
+sudo dnf -y install python3-pip 2>/dev/null
+
+pip3 install rich
+
 mkdir -p ~/.local/share/function-check/
 mkdir -p ~/.local/bin/
 cp gdb_script.py ~/.local/share/function-check/
