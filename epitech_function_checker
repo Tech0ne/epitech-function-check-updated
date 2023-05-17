@@ -22,7 +22,7 @@ flag_all = False
 compiler_functions = ["__cxa_finalize", "__stack_chk_fail"]
 
 def execute_gdb(binary_name):
-    os.system(f"gdb '{binary_name}' -ex 'source /home/{getuser()}/.local/share/function-check/gdb_script.py' -ex 'quit' > /dev/null")
+    os.system(f"gdb '{binary_name}' -ex 'source /etc/function-check/gdb_script.py' -ex 'quit' > /dev/null")
 
 def get_function_list() -> List[str]:
     try:
