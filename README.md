@@ -21,6 +21,7 @@ Then, the "function_checker" command should be available.
 ## Usage
 
 If you just want a nice looking list of syscalls used in your binary, simply run :
+
     function_checker {your binary}
 
 If you want a more advanced usage, with rating, warnings and more, you can add a "allowed_functions.json" to your current directory.
