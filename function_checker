@@ -4,6 +4,7 @@ import os
 import sys
 import errno
 import json
+from random import randint
 from typing import *
 
 from rich import print
@@ -18,6 +19,7 @@ import re
 flag_all = True
 compiler_functions = ["__cxa_finalize", "__stack_chk_fail"]
 database = None
+is_empty = True
 
 GDB_SCRIPT = r"""import gdb
 func_list = gdb.execute("info functions", True, True)
@@ -121,16 +123,22 @@ def show_result_with_data(func_list, allowed_list):
     result_table.add_column(Text("Results", style="bold"))
     result_table.add_column(Text("Mark", style="bold"))
     for func in func_list:
-        if match_database(func, allowed_list):
-            result_table.add_row(func, "[bold green][reverse]   GOOD  [/reverse] Function in allowed list", "[bold green]:heavy_check_mark:")
-            allowed_nb += 1
-        elif func in compiler_functions:
-            if flag_all:
-                result_table.add_row(f"[bold yellow]{func}", "[yellow][reverse] WARNING [/reverse] Unknown function (compiler ?)", "[yellow]:warning:")
-                warning_nb += 1
+        if len(allowed_list):
+            if match_database(func, allowed_list):
+                result_table.add_row(func, "[bold green][reverse]  GOOD   [/reverse] Function in allowed list", "[bold green]:heavy_check_mark:")
+                allowed_nb += 1
+            elif func in compiler_functions:
+                if flag_all:
+                    result_table.add_row(f"[bold yellow]{func}", "[yellow][reverse] WARNING [/reverse] Unknown function (compiler ?)", "[yellow]:warning:")
+                    warning_nb += 1
+            else:
+                result_table.add_row(f"[bold red]{func}", "[red][reverse]  ALERT  [/reverse] Function [bold]not[/bold] in allowed list", "[red]:double_exclamation_mark:")
+                banned_nb += 1
         else:
-            result_table.add_row(f"[bold red]{func}", "[red][reverse]  ALERT  [/reverse] Function [bold]not[/bold] in allowed list", "[red]:double_exclamation_mark:")
-            banned_nb += 1
+            if func in compiler_functions and flag_all:
+                result_table.add_row(f"[bold yellow]{func}", "[yellow][reverse] WARNING [/reverse] Unknown function (compiler ?)", "[yellow]:warning:")
+            else:
+                result_table.add_row(f"[bold white]{func}", "[white][reverse]  INFO   [/reverse]", ":upside-down_face:" if not randint(0, 100) else "")
     print(result_table)
     return banned_nb, warning_nb, allowed_nb
 
@@ -153,7 +161,7 @@ def show_recap(banned_nb, warning_nb, allowed_nb):
     return rate
 
 def show_binary_name(binary):
-    print(Panel(Align(f"[white bold]Checking [green]{binary}", align="center"), style="cyan blink"))
+    print(Panel(Align(f"[white bold not blink]Checking [green]{binary}", align="center"), style="cyan blink"))
 
 if __name__ == '__main__':
     banned_nb, warning_nb, allowed_nb = 0, 0, 0
@@ -174,25 +182,28 @@ if __name__ == '__main__':
         func_list = get_function_list()
         allowed_list = []
         if binary_name in database["projects"].keys():
+            is_empty = False
             allowed_list.extend(database["projects"][binary_name]["allowedFunctions"])
 
         show_binary_name(binary_name)
         current_banned_nb, current_warning_nb, current_allowed_nb = show_result_with_data(func_list, allowed_list)
-        rating.append(show_recap(current_banned_nb, current_warning_nb, current_allowed_nb))
+        if len(allowed_list):
+            rating.append(show_recap(current_banned_nb, current_warning_nb, current_allowed_nb))
         banned_nb += current_banned_nb
         warning_nb += current_warning_nb
         allowed_nb += current_allowed_nb
     
-    rating = round(sum(rating) / len(rating), 3)
-    color = "green"
-    if rating <= 7:
-        color = "yellow"
-    if rating <= 4:
-        color = "red"
-    if warning_nb > 0 and flag_all:
-        print(Panel("[yellow][reverse] WARNING [/reverse] Some warnings require your attention."))
-    if banned_nb > 0:
-        print(Panel("[red][reverse]  ALERT  [/reverse] Banned functions were detected!"))
-    if banned_nb == 0 and warning_nb == 0:
-        print(Panel("[green][reverse]   OK    [/reverse] All good, no problem found!", style="green"))
-    print(Panel(Align(f"Global rating : [{color}]{rating}[/{color}]", align="center"), style=color))
+    if not is_empty:
+        rating = round(sum(rating) / len(rating), 3)
+        color = "green"
+        if rating <= 7:
+            color = "yellow"
+        if rating <= 4:
+            color = "red"
+        if warning_nb > 0 and flag_all:
+            print(Panel("[yellow][reverse] WARNING [/reverse] Some warnings require your attention."))
+        if banned_nb > 0:
+            print(Panel("[red][reverse]  ALERT  [/reverse] Banned functions were detected!"))
+        if banned_nb == 0 and warning_nb == 0:
+            print(Panel("[green][reverse]   OK    [/reverse] All good, no problem found!", style="green"))
+        print(Panel(Align(f"Global rating : [{color}]{rating}[/{color}]", align="center"), style=color))
