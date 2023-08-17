@@ -1,17 +1,13 @@
 {
-    "comment": "Add as many \"projects\" as you can have (like one binary name, one debug binary name ...)",
+    "comment": "Add as many \"projects\" as you can want (like one binary name, one debug binary name ...). You can remove that line in the prod version.",
     "projects": {
         "{bin_name}": {
-            "projectName": "{project_name}",
-            "module": "{module_name}",
             "allowedFunctions": [
                 "malloc",
                 "free"
             ]
         },
-        "{debug_bin_name}": {
-            "projectName": "{project_name}",
-            "module": "{module_name}",
+        "{another_bin_name}": {
             "allowedFunctions": [
                 "malloc",
                 "free"

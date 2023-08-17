@@ -1,0 +1,198 @@
+#!/usr/bin/python3
+
+import os
+import sys
+import errno
+import json
+from typing import *
+
+from rich import print
+from rich.panel import Panel
+from rich.text import Text
+from rich.table import Table
+from rich.align import Align
+from rich import box
+
+import re
+
+flag_all = True
+compiler_functions = ["__cxa_finalize", "__stack_chk_fail"]
+database = None
+
+GDB_SCRIPT = r"""import gdb
+func_list = gdb.execute("info functions", True, True)
+lines = func_list.split('\n')
+result = []
+for line in lines:
+    func_name = line.split(' ')[-1]
+    if "@plt" in func_name:
+        result.append(func_name[:-4])
+
+with open("/tmp/function_list.result", "w+") as fd:
+    result.sort()
+    for func in result:
+        fd.write(func + '\n')
+"""
+
+def execute_gdb(binary_name):
+    if not os.path.isfile("/tmp/function_checker.py"):
+        try:
+            with open("/tmp/function_checker.py", 'w+') as f:
+                f.write(GDB_SCRIPT)
+        except Exception as e:
+            print(f"Error writing to file /tmp/function_checker.py : {e}")
+            sys.exit(1)
+    with open("/tmp/function_checker.py", 'r') as f:
+        gdb_script = f.read()
+    if gdb_script != GDB_SCRIPT:
+        print("Content of file /tmp/function_checker.py is invalid !\nUpdating.")
+        try:
+            with open("/tmp/function_checker.py", 'w+') as f:
+                f.write(GDB_SCRIPT)
+        except Exception as e:
+            print(f"Error writing to file /tmp/function_checker.py : {e}")
+            sys.exit(1)
+                
+    if os.path.isfile("/tmp/function_list.result"):
+        try:
+            os.remove("/tmp/function_list.result")
+        except Exception as e:
+            print("Could not remove old /tmp/function_list.result file : {e}")
+            sys.exit(1)
+    os.system(f"gdb '{binary_name}' -ex 'source /tmp/function_checker.py' -ex 'quit' > /dev/null")
+
+def get_function_list() -> List[str]:
+    try:
+        f = open("/tmp/function_list.result", "r")
+    except OSError as e:
+        print(f"Check.py: could not read function_list.result: {e.errno}")
+        sys.exit(0)
+    with f:
+        data = f.readlines()
+    os.remove("/tmp/function_list.result")
+    return(list(map(lambda x: x[:-1], data)))
+
+def get_database() -> dict:
+    try:
+        f = open("allowed_functions.json")
+        result = json.load(f)
+        if not result.get("projects"):
+            raise ValueError("No \"projects\" object")
+        f.close()
+    except Exception as e:
+        print(f"[INFO] could not read allowed_functions.json: {e}")
+        return {"projects": {}}
+    return result
+
+def manage_args(args):
+    if (len(args) < 1):
+        print(f'Error: wrong number of arguments, found {len(args)} but expected 1.\nTry again with -h for help.')
+        sys.exit(0)
+
+    flag_list = []
+    for e in args:
+        if e.startswith('-'):
+            flag_list.append(e)
+    for flag in flag_list:
+        if '-h' in args or '--help' in args:
+            print("""Usage: check.py {options | binary_name}\n
+Options:\n
+\t-h, --help\tShow this message.\n
+\t-a, --not-all\tDo not show all functions, (functions not added by user but by compiler.)""")
+            sys.exit(0)
+        if flag == "-a" or flag =="--not-all":
+            global flag_all
+            flag_all = False
+            
+def match_database(function, allowed_functions):
+    for regex in allowed_functions:
+        if regex[-1] != "*":
+            regex = regex + "$"
+        if re.match(regex, function):
+            return True
+    return False
+
+def show_result_with_data(func_list, allowed_list):
+    allowed_nb = 0
+    warning_nb = 0
+    banned_nb = 0
+    result_table = Table(title="", show_lines=False, expand="True", box=box.ROUNDED)
+    result_table.add_column(Text("Functions", style="bold"))
+    result_table.add_column(Text("Results", style="bold"))
+    result_table.add_column(Text("Mark", style="bold"))
+    for func in func_list:
+        if match_database(func, allowed_list):
+            result_table.add_row(func, "[bold green][reverse]   GOOD  [/reverse] Function in allowed list", "[bold green]:heavy_check_mark:")
+            allowed_nb += 1
+        elif func in compiler_functions:
+            if flag_all:
+                result_table.add_row(f"[bold yellow]{func}", "[yellow][reverse] WARNING [/reverse] Unknown function (compiler ?)", "[yellow]:warning:")
+                warning_nb += 1
+        else:
+            result_table.add_row(f"[bold red]{func}", "[red][reverse]  ALERT  [/reverse] Function [bold]not[/bold] in allowed list", "[red]:double_exclamation_mark:")
+            banned_nb += 1
+    print(result_table)
+    return banned_nb, warning_nb, allowed_nb
+
+def show_recap(banned_nb, warning_nb, allowed_nb):
+    recap_table = Table(title_style="bold not italic", expand=True, box=None)
+    banned_text = Text(str(banned_nb), style="dim") if banned_nb == 0 else Text(str(banned_nb))
+    warning_text = Text(str(warning_nb), style="dim") if warning_nb == 0 else Text(str(warning_nb))
+    allowed_text = Text(str(allowed_nb), style="dim") if allowed_nb == 0 else Text(str(allowed_nb))
+    recap_table.add_column(Text("Banned"), justify="center", style="red bold")
+    if flag_all:
+        recap_table.add_column(Text("Warning"), justify="center", style="bold yellow")
+    recap_table.add_column(Text("Allowed"), justify="center", style="bold green")
+    recap_table.add_column(Text("Rating"), justify="center", style="bold blue")
+    rate = round((allowed_nb * 10 + warning_nb * 5) / (allowed_nb + warning_nb + banned_nb), 3)
+    if flag_all:
+        recap_table.add_row(banned_text, warning_text, allowed_text, Text(str(rate)))
+    else:
+        recap_table.add_row(banned_text, allowed_text, Text(str(rate)))
+    print(Panel(recap_table))
+    return rate
+
+def show_binary_name(binary):
+    print(Panel(Align(f"[white bold]Checking [green]{binary}", align="center"), style="cyan blink"))
+
+if __name__ == '__main__':
+    banned_nb, warning_nb, allowed_nb = 0, 0, 0
+    rating = []
+    args = sys.argv[1:]
+    manage_args(args)
+    database = get_database()
+    for arg in args:
+        if arg == "":
+            continue
+        if arg[0] == '-':
+            continue
+        if not os.path.isfile(arg):
+            print(Panel(Align(f"[bold]Binary [red]{arg.split('/')[-1]}[/red] not found ![/bold]")))
+            continue
+        execute_gdb(arg)
+        binary_name = arg.split('/')[-1]
+        func_list = get_function_list()
+        allowed_list = []
+        if binary_name in database["projects"].keys():
+            allowed_list.extend(database["projects"][binary_name]["allowedFunctions"])
+
+        show_binary_name(binary_name)
+        current_banned_nb, current_warning_nb, current_allowed_nb = show_result_with_data(func_list, allowed_list)
+        rating.append(show_recap(current_banned_nb, current_warning_nb, current_allowed_nb))
+        banned_nb += current_banned_nb
+        warning_nb += current_warning_nb
+        allowed_nb += current_allowed_nb
+    
+    rating = round(sum(rating) / len(rating), 3)
+    color = "green"
+    if rating <= 7:
+        color = "yellow"
+    if rating <= 4:
+        color = "red"
+    if warning_nb > 0 and flag_all:
+        print(Panel("[yellow][reverse] WARNING [/reverse] Some warnings require your attention."))
+    if banned_nb > 0:
+        print(Panel("[red][reverse]  ALERT  [/reverse] Banned functions were detected!"))
+    if banned_nb == 0 and warning_nb == 0:
+        print(Panel("[green][reverse]   OK    [/reverse] All good, no problem found!", style="green"))
+    print(Panel(Align(f"Global rating : [{color}]{rating}[/{color}]", align="center"), style=color))
